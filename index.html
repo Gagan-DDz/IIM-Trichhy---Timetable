@@ -175,6 +175,24 @@
   .c0{color:#7c6dfa}.c1{color:#fa6d7c}.c2{color:#6dfabd}.c3{color:#fabd6d}.c4{color:#6dbdfa}
   .c5{color:#fa6dbd}.c6{color:#bdfa6d}.c7{color:#fa976d}.c8{color:#6dfafa}.c9{color:#bd6dfa}
 
+
+  /* CLASH WARNING */
+  .clash-banner {
+    background: rgba(250,109,124,0.12); border: 1px solid var(--accent2);
+    border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 1.25rem;
+  }
+  .clash-banner-title {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.85rem;
+    color: var(--accent2); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;
+  }
+  .clash-item { font-size: 0.72rem; color: var(--text); margin-bottom: 0.3rem; line-height: 1.5; }
+  .clash-item span { color: var(--accent2); font-weight: 600; }
+  .no-clash-banner {
+    background: rgba(109,250,189,0.1); border: 1px solid var(--accent3);
+    border-radius: 8px; padding: 0.65rem 1rem; margin-bottom: 1.25rem;
+    font-size: 0.75rem; color: var(--accent3); font-family: 'Syne', sans-serif; font-weight: 700;
+  }
+
   @media(max-width:600px){
     h1{font-size:1.4rem}
     .subject-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
@@ -248,6 +266,7 @@
         <button class="btn-reset" onclick="reset()">Start Over</button>
       </div>
     </div>
+    <div id="clash-banner"></div>
     <div class="stats-bar" id="stats-bar"></div>
     <div id="tt-content"></div>
   </div>
@@ -520,6 +539,10 @@ function generate() {
   document.getElementById('tt-content').innerHTML = html;
   document.getElementById('results').style.display = 'block';
 
+  // Clash detection
+  const clashes = detectClashes(myClasses);
+  renderClashBanner(clashes);
+
   // Save to recents
   if (currentUser) {
     const combo = { subjects: { ...selectedGroups } };
@@ -563,6 +586,54 @@ function reset() {
   document.getElementById('gen-btn').style.display = 'none';
   renderSubjects();
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+
+// ── CLASH DETECTION ──
+function detectClashes(classes) {
+  const byDate = {};
+  classes.forEach(e => {
+    if (!byDate[e.date]) byDate[e.date] = [];
+    byDate[e.date].push(e);
+  });
+
+  const clashes = [];
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  Object.keys(byDate).sort().forEach(date => {
+    const entries = byDate[date].sort((a,b) => a.start.localeCompare(b.start));
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i+1; j < entries.length; j++) {
+        const a = entries[i], b = entries[j];
+        if (a.end > b.start) {
+          const dt = new Date(date);
+          const dateStr = `${days[dt.getDay()]} ${dt.getDate()} ${months[dt.getMonth()]}`;
+          clashes.push({
+            date: dateStr,
+            a: `${a.subject} (${fmt12(a.start)}–${fmt12(a.end)})`,
+            b: `${b.subject} (${fmt12(b.start)}–${fmt12(b.end)})`
+          });
+        }
+      }
+    }
+  });
+  return clashes;
+}
+
+function renderClashBanner(clashes) {
+  const banner = document.getElementById('clash-banner');
+  if (!clashes.length) {
+    banner.innerHTML = `<div class="no-clash-banner">✓ No time clashes detected — your combination is clean</div>`;
+    return;
+  }
+  const items = clashes.map(c =>
+    `<div class="clash-item">⚠ <span>${c.date}:</span> ${c.a} clashes with ${c.b}</div>`
+  ).join('');
+  banner.innerHTML = `<div class="clash-banner">
+    <div class="clash-banner-title">⚠ ${clashes.length} time clash${clashes.length>1?'es':''} detected — please review your combination</div>
+    ${items}
+  </div>`;
 }
 
 // ── START ──
