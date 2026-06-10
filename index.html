@@ -193,6 +193,61 @@
     font-size: 0.75rem; color: var(--accent3); font-family: 'Syne', sans-serif; font-weight: 700;
   }
 
+
+  /* FREE DAYS */
+  .free-day {
+    display: flex; align-items: center; gap: 0.9rem;
+    padding: 0.6rem 1rem; margin-bottom: 0.5rem;
+    border-radius: 8px;
+    background: rgba(109,250,189,0.08);
+    border: 1px solid rgba(109,250,189,0.35);
+  }
+  .free-day-icon { font-size: 0.85rem; }
+  .free-day-name {
+    font-family: 'Syne', sans-serif; font-size: 0.78rem; font-weight: 800;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: #6dfabd; min-width: 36px;
+  }
+  .free-day-date {
+    font-size: 0.75rem; color: #6dfabd; font-family: 'DM Mono'; font-weight: 500;
+  }
+  .free-day-line { flex: 1; height: 1px; border-top: 1px dashed rgba(109,250,189,0.3); }
+  .free-day-badge {
+    font-size: 0.68rem; color: #0f0f13;
+    background: #6dfabd;
+    border-radius: 5px; padding: 0.22rem 0.65rem;
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    white-space: nowrap; letter-spacing: 0.05em;
+  }
+
+  /* FREE DAYS SUMMARY */
+  .free-summary { margin-top: 2rem; }
+  .free-summary-toggle {
+    width: 100%; background: rgba(109,250,189,0.06); border: 1px solid rgba(109,250,189,0.4); border-radius: 8px;
+    padding: 0.75rem 1rem; color: #6dfabd; font-family: 'DM Mono'; font-size: 0.75rem;
+    cursor: pointer; text-align: left; transition: all 0.15s; display: flex;
+    align-items: center; justify-content: space-between;
+  }
+  .free-summary-toggle:hover { border-color: var(--accent3); background: rgba(109,250,189,0.12); color: #6dfabd; }
+  .free-summary-toggle .arrow { transition: transform 0.2s; }
+  .free-summary-toggle.open .arrow { transform: rotate(180deg); }
+  .free-summary-body {
+    display: none; padding: 1rem; background: var(--card);
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 8px 8px;
+  }
+  .free-summary-body.open { display: block; }
+  .free-count-row { display: flex; gap: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .free-count { font-size: 0.7rem; color: var(--muted); }
+  .free-count strong { color: var(--accent3); font-family: 'Syne', sans-serif; font-weight: 700; display: block; font-size: 1.2rem; }
+  .free-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.4rem; }
+  .free-chip {
+    font-size: 0.68rem; padding: 0.3rem 0.6rem; border-radius: 5px;
+    background: var(--pill-bg); color: var(--muted); font-family: 'DM Mono';
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .free-chip .chip-day { color: var(--accent3); font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.65rem; }
+
   @media(max-width:600px){
     h1{font-size:1.4rem}
     .subject-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
@@ -265,6 +320,13 @@
         <button class="btn-dl" onclick="downloadCSV()">↓ Google Calendar CSV</button>
         <button class="btn-reset" onclick="reset()">Start Over</button>
       </div>
+    </div>
+    <div class="free-summary" id="free-summary" style="display:none">
+      <button class="free-summary-toggle" onclick="toggleFreeSummary(this)">
+        <span id="free-summary-label">📅 Free Days this term</span>
+        <span class="arrow">▾</span>
+      </button>
+      <div class="free-summary-body" id="free-summary-body"></div>
     </div>
     <div id="clash-banner"></div>
     <div class="stats-bar" id="stats-bar"></div>
@@ -505,14 +567,21 @@ function generate() {
 
   const byDate = {};
   myClasses.forEach(e => { if (!byDate[e.date]) byDate[e.date] = []; byDate[e.date].push(e); });
-  const dates = Object.keys(byDate).sort((a,b) => new Date(a)-new Date(b));
+  const dates = Object.keys(byDate).sort((a,b) => {
+    const [m1,d1,y1] = a.split('/'); const [m2,d2,y2] = b.split('/');
+    return new Date(y1,m1-1,d1) - new Date(y2,m2-1,d2);
+  });
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   let html = '';
   dates.forEach(d => {
     const dt = new Date(d);
-    const classes = byDate[d].sort((a,b) => a.start.localeCompare(b.start));
+    const classes = byDate[d].sort((a,b) => {
+      const [ah,am] = a.start.split(':').map(Number);
+      const [bh,bm] = b.start.split(':').map(Number);
+      return (ah*60+am) - (bh*60+bm);
+    });
     html += `<div class="day-block">
       <div class="day-header">
         <span class="day-name">${days[dt.getDay()]}</span>
@@ -536,7 +605,85 @@ function generate() {
     <div class="stat"><strong>${selectedSubjects.length}</strong>subjects</div>
     <div class="stat"><strong>Jun 8 – Aug 21</strong>term</div>`;
   document.getElementById('results-sub').textContent = selectedSubjects.map(s => `${s} (${selectedGroups[s]})`).join(' · ');
-  document.getElementById('tt-content').innerHTML = html;
+  // Compute free days
+  const freeDays = computeFreeDays(myClasses);
+  const freeDayMap = {};
+  freeDays.forEach(f => { freeDayMap[f.date] = f; });
+
+  // Rebuild html with free day markers between class days
+  let htmlWithFree = '';
+  const allDates = new Set(myClasses.map(e => e.date));
+  
+  // Get full date range and insert free days inline
+  const [fm,fd,fy] = dates[0].split('/');
+  const [lm,ld,ly] = dates[dates.length-1].split('/');
+  let cur = new Date(fy, fm-1, fd);
+  const last = new Date(ly, lm-1, ld);
+  const blocked2 = new Set(['07/10/2026','07/11/2026','07/12/2026','07/13/2026','07/14/2026','07/15/2026','08/11/2026','08/12/2026','08/15/2026']);
+  const daysArr = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const monthsArr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Build map of class html by date
+  const classHtmlByDate = {};
+  dates.forEach(d => {
+    const dt2 = new Date(d.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
+    const classes2 = byDate[d].sort((a,b) => {
+      const [ah,am] = a.start.split(':').map(Number);
+      const [bh,bm] = b.start.split(':').map(Number);
+      return (ah*60+am)-(bh*60+bm);
+    });
+    let dayHtml = `<div class="day-block"><div class="day-header">
+      <span class="day-name">${daysArr[dt2.getDay()]}</span>
+      <span class="day-date">${dt2.getDate()} ${monthsArr[dt2.getMonth()]}</span>
+      <span class="day-line"></span></div>`;
+    classes2.forEach(c => {
+      dayHtml += `<div class="class-card">
+        <span class="class-time">${fmt12(c.start)} – ${fmt12(c.end)}</span>
+        <span class="class-subj ${COLORS[c.subject]}">${c.subject}</span>
+        <span class="class-meta">${c.group !== 'All' ? c.group : ''}</span>
+        <span class="class-room">${c.room}</span>
+      </div>`;
+    });
+    dayHtml += '</div>';
+    classHtmlByDate[d] = dayHtml;
+  });
+
+  // Walk through days and interleave free markers
+  let freeStreak = [];
+  while (cur <= last) {
+    const ds = `${String(cur.getMonth()+1).padStart(2,'0')}/${String(cur.getDate()).padStart(2,'0')}/${cur.getFullYear()}`;
+    if (classHtmlByDate[ds]) {
+      if (freeStreak.length > 0) {
+        if (freeStreak.length <= 2) {
+          freeStreak.forEach(f => {
+            htmlWithFree += `<div class="free-day">
+              <span class="free-day-icon">🌿</span>
+              <span class="free-day-name">${f.day}</span>
+              <span class="free-day-date">${f.dateStr}</span>
+              <span class="free-day-line"></span>
+              <span class="free-day-badge">FREE</span>
+            </div>`;
+          });
+        } else {
+          htmlWithFree += `<div class="free-day">
+            <span class="free-day-icon">🌿</span>
+            <span class="free-day-name">Break</span>
+            <span class="free-day-date">${freeStreak[0].dateStr} – ${freeStreak[freeStreak.length-1].dateStr}</span>
+            <span class="free-day-line"></span>
+            <span class="free-day-badge">${freeStreak.length} FREE DAYS</span>
+          </div>`;
+        }
+        freeStreak = [];
+      }
+      htmlWithFree += classHtmlByDate[ds];
+    } else if (!blocked2.has(ds) && freeDayMap[ds]) {
+      freeStreak.push(freeDayMap[ds]);
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+
+  document.getElementById('tt-content').innerHTML = htmlWithFree;
+  renderFreeSummary(freeDays);
   document.getElementById('results').style.display = 'block';
 
   // Clash detection
@@ -561,7 +708,14 @@ function downloadCSV() {
   const myClasses = window._myClasses;
   if (!myClasses) return;
   const rows = ['Subject,Start Date,Start Time,End Time,All Day Event,Description,Location'];
-  myClasses.sort((a,b) => new Date(a.date)-new Date(b.date) || a.start.localeCompare(b.start)).forEach(c => {
+  myClasses.sort((a,b) => {
+    const [m1,d1,y1] = a.date.split('/'); const [m2,d2,y2] = b.date.split('/');
+    const dateDiff = new Date(y1,m1-1,d1) - new Date(y2,m2-1,d2);
+    if (dateDiff !== 0) return dateDiff;
+    const [ah,am] = a.start.split(':').map(Number);
+    const [bh,bm] = b.start.split(':').map(Number);
+    return (ah*60+am) - (bh*60+bm);
+  }).forEach(c => {
     const desc = `${c.subject} ${c.group !== 'All' ? c.group : ''} - IIM Trichy Term IV`.trim();
     rows.push(`${c.subject},${c.date},${c.start},${c.end},False,${desc},${c.room}`);
   });
@@ -584,6 +738,9 @@ function reset() {
   document.getElementById('results').style.display = 'none';
   document.getElementById('group-section').style.display = 'none';
   document.getElementById('gen-btn').style.display = 'none';
+  document.getElementById('free-summary').style.display = 'none';
+  document.getElementById('clash-banner').innerHTML = '';
+  document.getElementById('tt-content').innerHTML = '';
   renderSubjects();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -634,6 +791,72 @@ function renderClashBanner(clashes) {
     <div class="clash-banner-title">⚠ ${clashes.length} time clash${clashes.length>1?'es':''} detected — please review your combination</div>
     ${items}
   </div>`;
+}
+
+
+// ── FREE DAYS ──
+function computeFreeDays(myClasses) {
+  const termStart = new Date('2026-06-08');
+  const termEnd   = new Date('2026-08-21');
+  const blocked = new Set([
+    '07/10/2026','07/11/2026','07/12/2026','07/13/2026',
+    '07/14/2026','07/15/2026',
+    '08/11/2026','08/12/2026',
+    '08/15/2026',
+  ]);
+  const classDates = new Set(myClasses.map(e => e.date));
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const freeDays = [];
+  let cur = new Date(termStart);
+  while (cur <= termEnd) {
+    const ds = `${String(cur.getMonth()+1).padStart(2,'0')}/${String(cur.getDate()).padStart(2,'0')}/${cur.getFullYear()}`;
+    if (!classDates.has(ds) && !blocked.has(ds)) {
+      freeDays.push({
+        date: ds,
+        day: days[cur.getDay()],
+        dateStr: `${cur.getDate()} ${months[cur.getMonth()]}`,
+        isWeekend: cur.getDay() === 0 || cur.getDay() === 6
+      });
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return freeDays;
+}
+
+function renderFreeDaysInline(freeDays, classDates) {
+  // Returns a map of date -> free day html to inject between class days
+  const map = {};
+  freeDays.forEach(f => { map[f.date] = f; });
+  return map;
+}
+
+function toggleFreeSummary(btn) {
+  btn.classList.toggle('open');
+  document.getElementById('free-summary-body').classList.toggle('open');
+}
+
+function renderFreeSummary(freeDays) {
+  const weekdays = freeDays.filter(f => !f.isWeekend);
+  const weekends = freeDays.filter(f => f.isWeekend);
+
+  document.getElementById('free-summary-label').textContent =
+    `📅 ${freeDays.length} Free Days this term  ·  ${weekdays.length} weekdays · ${weekends.length} weekends`;
+
+  const chips = freeDays.map(f =>
+    `<div class="free-chip"><span>${f.dateStr}</span><span class="chip-day">${f.day}</span></div>`
+  ).join('');
+
+  document.getElementById('free-summary-body').innerHTML = `
+    <div class="free-count-row">
+      <div class="free-count"><strong>${freeDays.length}</strong>total free days</div>
+      <div class="free-count"><strong>${weekdays.length}</strong>free weekdays</div>
+      <div class="free-count"><strong>${weekends.length}</strong>free weekends</div>
+    </div>
+    <div class="free-grid">${chips}</div>
+  `;
+  document.getElementById('free-summary').style.display = 'block';
 }
 
 // ── START ──
