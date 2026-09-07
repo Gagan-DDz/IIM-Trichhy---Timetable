@@ -212,6 +212,44 @@
     font-size: 0.75rem; color: #2e7d32; font-family: 'DM Mono'; font-weight: 500;
   }
   .free-day-line { flex: 1; height: 1px; border-top: 1px dashed rgba(46,125,50,0.25); }
+
+  /* ── TERM EVENT BARS (Daksha, Sangaram, Placement, exams…) ── */
+  .term-event {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.6rem 0.85rem; margin: 0.5rem 0 0.9rem;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: var(--pill-bg);
+  }
+  .term-event-icon { font-size: 0.95rem; line-height: 1; }
+  .term-event-name {
+    font-family: 'Fraunces', serif; font-weight: 700;
+    font-size: 0.78rem; letter-spacing: 0.02em;
+  }
+  .term-event-date { font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+  .term-event-line { flex: 1; height: 1px; border-top: 1px dashed var(--border); min-width: 12px; }
+  .term-event-badge {
+    font-size: 0.58rem; font-family: 'DM Mono', monospace; letter-spacing: 0.08em;
+    padding: 0.2rem 0.5rem; border-radius: 5px; white-space: nowrap;
+    background: rgba(0,0,0,0.05); color: var(--muted);
+  }
+  .term-event.fest    { background: rgba(214,108,44,0.09);  border-color: rgba(214,108,44,0.28); }
+  .term-event.fest    .term-event-name, .term-event.fest .term-event-badge { color: #b3541e; }
+  .term-event.fest    .term-event-badge { background: rgba(214,108,44,0.14); }
+  .term-event.exam    { background: rgba(46,125,50,0.09);   border-color: rgba(46,125,50,0.28); }
+  .term-event.exam    .term-event-name, .term-event.exam .term-event-badge { color: #2e7d32; }
+  .term-event.exam    .term-event-badge { background: rgba(46,125,50,0.14); }
+  .term-event.placement { background: rgba(21,101,192,0.08); border-color: rgba(21,101,192,0.26); }
+  .term-event.placement .term-event-name, .term-event.placement .term-event-badge { color: #1565c0; }
+  .term-event.placement .term-event-badge { background: rgba(21,101,192,0.13); }
+  .term-event.holiday { background: rgba(154,52,142,0.08);  border-color: rgba(154,52,142,0.26); }
+  .term-event.holiday .term-event-name, .term-event.holiday .term-event-badge { color: #8e3a86; }
+  .term-event.holiday .term-event-badge { background: rgba(154,52,142,0.13); }
+  .term-event.session { background: rgba(120,113,108,0.08); border-color: rgba(120,113,108,0.26); }
+  @media (max-width: 520px) {
+    .term-event { flex-wrap: wrap; gap: 0.4rem 0.55rem; }
+    .term-event-line { display: none; }
+    .term-event-date { width: 100%; order: 3; }
+  }
   .free-day-badge {
     font-size: 0.68rem; color: #ffffff;
     background: #2e7d32;
@@ -444,6 +482,71 @@ function saveRecent(roll, combo) {
   try { localStorage.setItem(storageKey(roll,'recents'), JSON.stringify(recents)); } catch {}
 }
 
+// ── USAGE TRACKING (private, owner-only) ──
+// Paste your Google Apps Script Web App URL between the quotes to switch on.
+// Leave it empty and NOTHING is ever sent anywhere.
+const TRACKING_URL = '';
+
+let _loggedThisSession = false;
+function logUsage(event, detail) {
+  if (!TRACKING_URL || !currentUser) return;
+  try {
+    const payload = {
+      event: event,
+      name: currentUser.name,
+      roll: currentUser.roll,
+      detail: detail || '',
+      ts: new Date().toISOString(),
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      device: (typeof navigator !== 'undefined' ? navigator.userAgent : '').slice(0, 120)
+    };
+    // no-cors + text/plain avoids a CORS preflight; Apps Script accepts it.
+    fetch(TRACKING_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      keepalive: true
+    }).catch(function () {});
+  } catch (e) { /* tracking must never break the app */ }
+}
+
+// ── TERM EVENT PERIODS ──
+// Shown as one collapsed bar instead of a silent gap in the timetable.
+const TERM_EVENTS = [
+  { start:'09/12/2026', end:'09/12/2026', name:'Daksha',              icon:'\ud83c\udf89', kind:'fest',      badge:'NO CLASSES' },
+  { start:'10/02/2026', end:'10/02/2026', name:'Gandhi Jayanti',      icon:'\ud83c\udf3f', kind:'holiday',   badge:'HOLIDAY' },
+  { start:'10/09/2026', end:'10/09/2026', name:'Mid-Term',            icon:'\ud83d\udcdd', kind:'exam',      badge:'EXAMS' },
+  { start:'10/16/2026', end:'10/18/2026', name:'Quiz & Guest Sessions', icon:'\ud83c\udf99\ufe0f', kind:'session', badge:'NO REGULAR CLASSES' },
+  { start:'10/23/2026', end:'10/23/2026', name:'Quiz & Guest Speaker',  icon:'\ud83c\udf99\ufe0f', kind:'session', badge:'NO REGULAR CLASSES' },
+  { start:'10/24/2026', end:'10/25/2026', name:'MAD Project',         icon:'\ud83d\udee0\ufe0f', kind:'session', badge:'PROJECT' },
+  { start:'10/26/2026', end:'10/30/2026', name:'Placement Week',      icon:'\ud83d\udcbc', kind:'placement', badge:'NO CLASSES' },
+  { start:'11/06/2026', end:'11/08/2026', name:'Quiz & Guest Sessions', icon:'\ud83c\udf99\ufe0f', kind:'session', badge:'NO REGULAR CLASSES' },
+  { start:'11/13/2026', end:'11/15/2026', name:'Sangaram',            icon:'\ud83c\udfc6', kind:'fest',      badge:'NO CLASSES' },
+  { start:'11/23/2026', end:'11/27/2026', name:'Placement Week',      icon:'\ud83d\udcbc', kind:'placement', badge:'NO CLASSES' },
+  { start:'12/04/2026', end:'12/12/2026', name:'End-Term Examinations', icon:'\ud83c\udf93', kind:'exam',    badge:'EXAMS' }
+];
+
+function eventBarHtml(ev) {
+  const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const f = s => { const [m,d,y] = s.split('/').map(Number); return { d, m: MO[m-1] }; };
+  const a = f(ev.start), b = f(ev.end);
+  let span;
+  if (ev.start === ev.end) span = `${a.d} ${a.m}`;
+  else if (a.m === b.m)    span = `${a.d} \u2013 ${b.d} ${b.m}`;
+  else                     span = `${a.d} ${a.m} \u2013 ${b.d} ${b.m}`;
+  const nDays = Math.round((new Date(ev.end.replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$1-$2'))
+                          - new Date(ev.start.replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$1-$2'))) / 86400000) + 1;
+  const dayTxt = nDays > 1 ? `${nDays} DAYS` : ev.badge;
+  return `<div class="term-event ${ev.kind}">
+    <span class="term-event-icon">${ev.icon}</span>
+    <span class="term-event-name">${ev.name}</span>
+    <span class="term-event-date">${span}</span>
+    <span class="term-event-line"></span>
+    <span class="term-event-badge">${nDays > 1 ? dayTxt + ' \u00b7 ' + ev.badge : ev.badge}</span>
+  </div>`;
+}
+
 // ── TERM MIGRATION ──
 // Term V replaces Term IV at the same URL, so returning users still carry
 // Term IV saved combinations in localStorage. Those reference subjects that
@@ -501,11 +604,14 @@ function saveUser() {
   if (!existing) saveUserData(roll, { name, roll });
   localStorage.setItem('tt_current_user', JSON.stringify(currentUser));
   document.getElementById('modal').style.display = 'none';
+  logUsage('signup');
+  _loggedThisSession = true;
   showApp();
 }
 
 function showApp() {
   if (currentUser && currentUser.roll) pruneRecents(currentUser.roll);
+  if (!_loggedThisSession) { logUsage('visit'); _loggedThisSession = true; }
   // Welcome bar
   document.getElementById('welcome-bar').style.display = 'flex';
   document.getElementById('welcome-name').textContent = currentUser.name;
@@ -766,33 +872,47 @@ function generate() {
     classHtmlByDate[d] = dayHtml;
   });
 
-  // Walk through days and interleave free markers
+  // Walk through days and interleave free markers + term event bars
+  const eventByStart = {};
+  TERM_EVENTS.forEach(ev => { eventByStart[ev.start] = ev; });
+  const flushFree = () => {
+    if (!freeStreak.length) return;
+    if (freeStreak.length <= 2) {
+      freeStreak.forEach(f => {
+        htmlWithFree += `<div class="free-day">
+          <span class="free-day-icon">\ud83c\udf3f</span>
+          <span class="free-day-name">${f.day}</span>
+          <span class="free-day-date">${f.dateStr}</span>
+          <span class="free-day-line"></span>
+          <span class="free-day-badge">FREE</span>
+        </div>`;
+      });
+    } else {
+      htmlWithFree += `<div class="free-day">
+        <span class="free-day-icon">\ud83c\udf3f</span>
+        <span class="free-day-name">Break</span>
+        <span class="free-day-date">${freeStreak[0].dateStr} \u2013 ${freeStreak[freeStreak.length-1].dateStr}</span>
+        <span class="free-day-line"></span>
+        <span class="free-day-badge">${freeStreak.length} FREE DAYS</span>
+      </div>`;
+    }
+    freeStreak = [];
+  };
+
   let freeStreak = [];
   while (cur <= last) {
     const ds = `${String(cur.getMonth()+1).padStart(2,'0')}/${String(cur.getDate()).padStart(2,'0')}/${cur.getFullYear()}`;
+    // A term event (Daksha, Sangaram, Placement...) collapses into one bar
+    if (eventByStart[ds]) {
+      const ev = eventByStart[ds];
+      flushFree();
+      htmlWithFree += eventBarHtml(ev);
+      const endD = new Date(ev.end.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
+      cur = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate() + 1);
+      continue;
+    }
     if (classHtmlByDate[ds]) {
-      if (freeStreak.length > 0) {
-        if (freeStreak.length <= 2) {
-          freeStreak.forEach(f => {
-            htmlWithFree += `<div class="free-day">
-              <span class="free-day-icon">🌿</span>
-              <span class="free-day-name">${f.day}</span>
-              <span class="free-day-date">${f.dateStr}</span>
-              <span class="free-day-line"></span>
-              <span class="free-day-badge">FREE</span>
-            </div>`;
-          });
-        } else {
-          htmlWithFree += `<div class="free-day">
-            <span class="free-day-icon">🌿</span>
-            <span class="free-day-name">Break</span>
-            <span class="free-day-date">${freeStreak[0].dateStr} – ${freeStreak[freeStreak.length-1].dateStr}</span>
-            <span class="free-day-line"></span>
-            <span class="free-day-badge">${freeStreak.length} FREE DAYS</span>
-          </div>`;
-        }
-        freeStreak = [];
-      }
+      flushFree();
       htmlWithFree += classHtmlByDate[ds];
     } else if (!blocked2.has(ds) && freeDayMap[ds]) {
       freeStreak.push(freeDayMap[ds]);
@@ -800,8 +920,18 @@ function generate() {
     cur.setDate(cur.getDate()+1);
   }
 
+  flushFree();
+  // Events after the final class day (e.g. End-Term) still get a bar
+  TERM_EVENTS.forEach(ev => {
+    const st = new Date(ev.start.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
+    if (st > last) htmlWithFree += eventBarHtml(ev);
+  });
+
   document.getElementById('tt-content').innerHTML = htmlWithFree;
   renderExams();
+  logUsage('generate', selectedSubjects.map(function (s) {
+    return s + '(' + (selectedGroups[s] || '') + ')';
+  }).join(' '));
   renderFreeSummary(freeDays);
   document.getElementById('results').style.display = 'block';
 
