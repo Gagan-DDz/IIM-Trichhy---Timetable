@@ -444,8 +444,38 @@ function saveRecent(roll, combo) {
   try { localStorage.setItem(storageKey(roll,'recents'), JSON.stringify(recents)); } catch {}
 }
 
+// ── TERM MIGRATION ──
+// Term V replaces Term IV at the same URL, so returning users still carry
+// Term IV saved combinations in localStorage. Those reference subjects that
+// no longer exist (DAM, IAPM, LEAP...) and would render as empty timetables.
+// Purge them once, keeping the user signed in.
+const TERM_VERSION = 'T5-2026';
+function migrateTerm() {
+  try {
+    if (localStorage.getItem('tt_term_version') === TERM_VERSION) return;
+    const doomed = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && /^tt_.+_(recents|data)$/.test(k)) doomed.push(k);
+    }
+    doomed.forEach(k => localStorage.removeItem(k));
+    localStorage.setItem('tt_term_version', TERM_VERSION);
+  } catch {}
+}
+
+// Drop any saved combo that references a subject/group not in this term
+function pruneRecents(roll) {
+  try {
+    const valid = getRecents(roll).filter(r =>
+      r && r.subjects && Object.entries(r.subjects).every(([s, g]) =>
+        ALL_SUBJECTS.includes(s) && (SUBJECT_GROUPS[s] || []).includes(g)));
+    localStorage.setItem(storageKey(roll, 'recents'), JSON.stringify(valid));
+  } catch {}
+}
+
 // ── USER FLOW ──
 function init() {
+  migrateTerm();
   const stored = localStorage.getItem('tt_current_user');
   if (stored) {
     try {
@@ -475,6 +505,7 @@ function saveUser() {
 }
 
 function showApp() {
+  if (currentUser && currentUser.roll) pruneRecents(currentUser.roll);
   // Welcome bar
   document.getElementById('welcome-bar').style.display = 'flex';
   document.getElementById('welcome-name').textContent = currentUser.name;
